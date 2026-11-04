@@ -1,5 +1,5 @@
 // 견적 원장 오프라인 캐시. 앱을 고친 뒤에는 CACHE 버전 숫자를 올린다.
-const CACHE = "gyeonjeok-v1";
+const CACHE = "gyeonjeok-v1.0.0";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));

@@ -148,6 +148,10 @@ img{max-width:100%}
 .hdr-actions{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .backup-ok{color:var(--good)}
 .backup-warn{color:var(--warn)}
+a.btn{text-decoration:none;display:inline-block}
+.envnote{background:var(--warn-bg);color:var(--ink);border:1px solid var(--warn);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.doc .supplier{border:1px solid var(--line);padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+ul.help{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;max-width:68ch}
 @media print{
   @page{size:A4;margin:12mm}
   html:not(#_){--bg:#fff;--surface:#fff;--ink:#000;--muted:#444;--line:#999;--soft:#eee;--stamp:#c0392b;color-scheme:light;padding:0}
@@ -171,11 +175,12 @@ img{max-width:100%}
       </div>
     </div>
     <div class="hdr-actions">
-      <button class="btn primary" id="hdrSave">파일 저장</button>
+      <div class="row" style="gap:6px;justify-content:flex-end"><button class="btn" id="installBtn" hidden>앱 설치</button><button class="btn primary" id="hdrSave">파일 저장</button></div>
       <span id="saved" class="saved"></span>
       <span id="lastBk" class="saved"></span>
     </div>
   </header>
+  <div class="envnote" id="envNote" role="status" hidden></div>
   <nav class="tabs" role="tablist" id="tabs"></nav>
   <main id="view"></main>
 </div>
@@ -185,6 +190,7 @@ img{max-width:100%}
 (function(){
 "use strict";
 const KEY="gyeonjeok-ledger-v1";
+const APP_VERSION="1.0.0";
 const uid=()=>Math.random().toString(36).slice(2,10);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=n=>Math.round(+n||0).toLocaleString("ko-KR");
@@ -193,7 +199,7 @@ const num=v=>{const n=parseFloat(v);return isFinite(n)?n:0};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 
 /* ---------- 예시 데이터 ---------- */
-function sample(){
+function sample(blank){
   const it=(trade,name,spec,unit,mat,lab,exp,margin,loss,vatNd)=>({id:uid(),trade,name,spec,unit,mat,lab,exp,margin,loss,vatNd:!!vatNd});
   const items=[
     it("철거","바닥재 철거","폐기물 포함","m²",0,8000,3000,.25,0,true),
@@ -209,14 +215,16 @@ function sample(){
   ];
   const by=n=>items.find(i=>i.name===n);
   const ln=(n,q)=>({id:uid(),qty:q,override:null,snap:{...by(n)}});
-  return {
-    settings:{round:100,minMargin:.20,mode:"margin"},
+  const out={
+    settings:{round:100,minMargin:.20,mode:"margin",company:{name:"",ceo:"",bizno:"",phone:"",addr:""}},
     items,
     estimates:[{id:uid(),site:"예시 · 32평 아파트 부분 수리",client:"예시 고객",date:today(),
       ohRate:.03,execOH:200000,discount:300000,actuals:{},
       lines:[ln("바닥재 철거",76),ln("강마루",76),ln("실크벽지",210),ln("천장 몰딩 교체",95),ln("LED 매입등",14),ln("문틀·문짝 필름",5)]}],
     current:null, tab:"est"
   };
+  if(blank) out.estimates=[];
+  return out;
 }
 
 /* ---------- 저장 ---------- */
@@ -224,7 +232,7 @@ let S=load();
 if(!S.current||!S.estimates.find(e=>e.id===S.current)) S.current=S.estimates[0]?.id||null;
 function load(){
   try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);if(o&&Array.isArray(o.items)&&Array.isArray(o.estimates)&&o.settings)return o;}}catch(e){}
-  return sample();
+  const s=sample();s.firstRun=true;return s;
 }
 function save(){
   const el=document.getElementById("saved");
@@ -313,9 +321,25 @@ async function copyText(txt,fallbackEl){
   catch(e){if(fallbackEl){fallbackEl.focus();fallbackEl.select();}toast("자동 복사가 막혔습니다. 선택된 내용을 직접 복사하세요");}
 }
 function render(){
+  if(!S.settings.company)S.settings.company={name:"",ceo:"",bizno:"",phone:"",addr:""};
   renderTabs();
   const v=document.getElementById("view");
   ({est:renderEst,cust:renderCust,prices:renderPrices,settle:renderSettle,set:renderSet})[S.tab||"est"](v);
+  if(S.firstRun)showWelcome();
+}
+function showWelcome(){
+  const L=document.getElementById("layer");if(L.innerHTML)return;
+  L.innerHTML=`<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="wT">
+    <h2 id="wT">견적 원장을 시작합니다</h2>
+    <div class="sub">입력한 견적과 단가는 이 기기에만 저장되며 다른 곳으로 전송되지 않습니다.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn primary" id="wSample">예시 견적으로 둘러보기</button>
+      <button class="btn" id="wBlank">바로 시작하기 (예시 단가표만 유지)</button>
+    </div>
+    <div class="sub">예시 단가는 실제 시세가 아닙니다. 단가표 탭에서 본인 단가로 바꿔 쓰세요.</div>
+  </div></div>`;
+  L.querySelector("#wSample").onclick=()=>{delete S.firstRun;L.innerHTML="";save();render();};
+  L.querySelector("#wBlank").onclick=()=>{const co=S.settings.company;S=sample(true);S.settings.company=co;S.current=null;S.tab="set";L.innerHTML="";save();render();toast("사업자 정보를 먼저 입력하세요");};
 }
 
 /* ---------- 견적 작성 ---------- */
@@ -456,10 +480,10 @@ function customerDoc(e){ // 실행가·마진 관련 필드는 이 객체에 들
   e.lines.forEach(l=>{const c=lineCalc(l),t=l.snap.trade||"기타";let g=groups.find(x=>x.trade===t);if(!g){g={trade:t,rows:[],sum:0};groups.push(g);}
     g.rows.push({name:String(l.snap.name||""),spec:String(l.snap.spec||""),unit:String(l.snap.unit||""),qty:num(l.qty),price:c.qu,amount:c.quote});g.sum+=c.quote;});
   return {site:String(e.site||""),client:String(e.client||""),date:String(e.date||""),groups,
-    direct:k.Q,ohRate:num(e.ohRate),oh:k.oh,discount:k.disc,supply:k.supply,vat:k.vat,total:k.total};
+    company:(({name,ceo,bizno,phone,addr})=>({name:String(name||""),ceo:String(ceo||""),bizno:String(bizno||""),phone:String(phone||""),addr:String(addr||"")}))(S.settings.company||{}),direct:k.Q,ohRate:num(e.ohRate),oh:k.oh,discount:k.disc,supply:k.supply,vat:k.vat,total:k.total};
 }
 function docText(d){
-  const L=[`견 적 서`,`현장: ${d.site}`,`고객: ${d.client} 귀하`,`견적일: ${d.date}`,`합계(VAT 포함): 일금 ${korWon(d.total)}원정 (₩${fmt(d.total)})`,""];
+  const L=[`견 적 서`,`공급자: ${d.company.name}${d.company.ceo?" (대표 "+d.company.ceo+")":""}${d.company.phone?" · "+d.company.phone:""}`,`현장: ${d.site}`,`고객: ${d.client} 귀하`,`견적일: ${d.date}`,`합계(VAT 포함): 일금 ${korWon(d.total)}원정 (₩${fmt(d.total)})`,""];
   d.groups.forEach(g=>{L.push(`[${g.trade}]`);g.rows.forEach(r=>L.push(`- ${r.name}${r.spec?" ("+r.spec+")":""}: ${(+r.qty.toFixed(2)).toLocaleString("ko-KR")}${r.unit} × ${fmt(r.price)} = ${fmt(r.amount)}`));L.push(`  소계 ${fmt(g.sum)}`);});
   L.push("",`직접공사비 ${fmt(d.direct)}`,`공과잡비 ${fmt(d.oh)}`);
   if(d.discount)L.push(`할인 −${fmt(d.discount)}`);
@@ -468,7 +492,7 @@ function docText(d){
 }
 function renderCust(v){
   const e=cur();if(!e){v.innerHTML=`<div class="panel"><div class="empty">견적을 먼저 만들어 주세요.</div></div>`;return;}
-  const d=customerDoc(e);
+  const d=customerDoc(e),co=d.company;
   const rows=d.groups.map(g=>`<tr class="trade-h"><td colspan="5">${esc(g.trade)}</td></tr>`+
     g.rows.map(r=>`<tr><td>${esc(r.name)}${r.spec?`<div class="sub">${esc(r.spec)}</div>`:""}</td><td class="r num">${(+r.qty.toFixed(2)).toLocaleString("ko-KR")}</td><td>${esc(r.unit)}</td><td class="r num">${fmt(r.price)}</td><td class="r num">${fmt(r.amount)}</td></tr>`).join("")+
     `<tr><td colspan="4" class="r sub">${esc(g.trade)} 소계</td><td class="r num">${fmt(g.sum)}</td></tr>`).join("");
@@ -483,6 +507,12 @@ function renderCust(v){
         <div><span class="sub">견적일 </span><span class="num">${esc(d.date)}</span></div>
         <div style="grid-column:1/-1"><span class="sub">현장 </span>${esc(d.site)}</div>
       </div>
+      <div class="supplier"><span class="sub">공급자</span>
+        <div><b>${esc(co.name||"상호 미입력")}</b>${co.ceo?` · 대표 ${esc(co.ceo)}`:""}</div>
+        ${co.bizno?`<div>사업자등록번호 <span class="num">${esc(co.bizno)}</span></div>`:""}
+        ${co.addr?`<div>${esc(co.addr)}</div>`:""}
+        ${co.phone?`<div>연락처 <span class="num">${esc(co.phone)}</span></div>`:""}
+      </div>
       <div class="amount"><span class="kor">일금 ${korWon(d.total)}원정</span><span class="num">(₩${fmt(d.total)}, VAT 포함)</span></div>
       <div class="tablewrap" style="border-radius:0">
         <table><thead><tr><th>품목</th><th class="r">수량</th><th>단위</th><th class="r">단가</th><th class="r">금액</th></tr></thead>
@@ -496,7 +526,7 @@ function renderCust(v){
         </tbody></table>
       </div>
       <div class="sub">위와 같이 견적합니다. 현장 여건에 따라 수량이 달라지면 추가·변경 견적으로 정산합니다.</div>
-      <div class="stamp">상호 · 대표자 (인)</div>
+      <div class="stamp">${esc(co.name||"상호")}${co.ceo?" 대표 "+esc(co.ceo):""} (인)</div>
     </article>
     <textarea id="cpTxt" readonly aria-label="복사용 텍스트" style="min-height:90px">${esc(docText(d))}</textarea>
   </div>`;
@@ -618,6 +648,18 @@ function renderSet(v){
   const s=S.settings;
   v.innerHTML=`
   <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="panel"><h2>사업자 정보</h2>
+      <div class="sub">고객용 견적서의 공급자 칸과 도장 자리에 표시됩니다.</div>
+      <div class="row">
+        <div class="field"><label for="cName">상호</label><input id="cName" value="${esc(s.company.name)}"></div>
+        <div class="field"><label for="cCeo">대표자</label><input id="cCeo" value="${esc(s.company.ceo)}"></div>
+        <div class="field"><label for="cBiz">사업자등록번호</label><input id="cBiz" inputmode="numeric" value="${esc(s.company.bizno)}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="cPhone">연락처</label><input id="cPhone" inputmode="tel" value="${esc(s.company.phone)}"></div>
+        <div class="field" style="flex:2 1 240px"><label for="cAddr">주소</label><input id="cAddr" value="${esc(s.company.addr)}"></div>
+      </div>
+    </div>
     <div class="panel"><h2>계산 설정</h2>
       <div class="row">
         <div class="field"><label for="sMode">가격 결정 방식</label><select id="sMode"><option value="margin" ${s.mode==="margin"?"selected":""}>마진율: 원가 ÷ (1 − 율)</option><option value="markup" ${s.mode==="markup"?"selected":""}>마크업: 원가 × (1 + 율)</option></select></div>
@@ -638,7 +680,18 @@ function renderSet(v){
       <textarea id="rs" placeholder='{"settings":…}'></textarea>
       <div class="row"><button class="btn" id="rsBtn">붙여 넣은 백업으로 복원</button><button class="btn danger" id="reset">예시 데이터로 초기화</button></div>
     </div>
+    <div class="panel"><h2>사용 안내</h2>
+      <ul class="help">
+        <li>단가표에 자재비·노무비·경비와 마진율을 넣으면 견적단가가 자동으로 계산됩니다.</li>
+        <li>견적 작성 화면 아래 손익 요약에서 할인 후 마진을 확인하세요. 최소 마진보다 낮으면 노란색, 적자면 빨간색으로 바뀝니다.</li>
+        <li>고객에게는 '고객용 견적서' 탭만 보여주세요. 실행가와 마진은 그 화면과 PDF에 나오지 않습니다.</li>
+        <li>PDF는 고객용 견적서 탭의 '인쇄 / PDF 저장'을 누른 뒤 프린터를 'PDF로 저장'으로 고릅니다.</li>
+        <li>데이터는 이 기기에만 저장됩니다. 일주일에 한 번 '공유'로 구글드라이브나 카톡 나와의 채팅에 백업하세요. 앱을 지우면 데이터도 함께 지워집니다.</li>
+      </ul>
+      <div class="sub">견적 원장 v${APP_VERSION}</div>
+    </div>
   </div>`;
+  [["cName","name"],["cCeo","ceo"],["cBiz","bizno"],["cPhone","phone"],["cAddr","addr"]].forEach(([id,k])=>{v.querySelector("#"+id).oninput=ev=>{s.company[k]=ev.target.value;save();};});
   v.querySelector("#sMode").onchange=ev=>{s.mode=ev.target.value;save();toast("저장했습니다");};
   v.querySelector("#sRound").onchange=ev=>{s.round=num(ev.target.value);save();toast("저장했습니다");};
   v.querySelector("#sMin").oninput=ev=>{s.minMargin=num(ev.target.value)/100;save();};
@@ -651,12 +704,33 @@ function renderSet(v){
     if(!o||!Array.isArray(o.items)||!Array.isArray(o.estimates)||!o.settings){toast("단가표·견적 정보가 없는 백업입니다");return;}
     confirmBox("현재 데이터를 붙여 넣은 백업으로 바꿉니다.","복원",()=>{S={...o,current:o.estimates[0]?.id||null,tab:"est"};save();render();toast("복원했습니다");});
   };
-  v.querySelector("#reset").onclick=()=>confirmBox("모든 견적과 단가표를 지우고 예시 데이터로 되돌립니다.","초기화",()=>{S=sample();S.current=S.estimates[0].id;save();render();});
+  v.querySelector("#reset").onclick=()=>confirmBox("모든 견적과 단가표를 지우고 예시 데이터로 되돌립니다.","초기화",()=>{const co=S.settings.company;S=sample();S.settings.company=co||S.settings.company;S.current=S.estimates[0].id;save();render();});
 }
 
 document.getElementById("hdrSave").onclick=downloadFile;
 if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(()=>{});}
-window.__calc={unitCost,autoQuoteUnit,lineCalc,estCalc,korWon,customerDoc,setS:x=>{S=x}};
+(function envCheck(){
+  const ua=navigator.userAgent||"",box=document.getElementById("envNote");
+  const inApp=/KAKAOTALK|NAVER\(|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(ua);
+  const isAndroid=/Android/i.test(ua);
+  const local=!/^https?:$/.test(location.protocol);
+  if(inApp){
+    const url=location.href;
+    const ext=/KAKAOTALK/i.test(ua)?"kakaotalk://web/openExternal?url="+encodeURIComponent(url)
+      :(isAndroid?"intent://"+url.replace(/^https?:\/\//,"")+"#Intent;scheme=https;package=com.android.chrome;end":"");
+    box.innerHTML=`<b>앱 안의 브라우저에서 열려 있습니다</b><span>이 상태에서는 설치가 안 되고 데이터가 사라질 수 있습니다. 메뉴(⋮)에서 '다른 브라우저로 열기'를 눌러 Chrome으로 여세요.</span><div class="row" style="gap:6px">${ext?`<a class="btn primary" href="${esc(ext)}">Chrome으로 열기</a>`:""}<button class="btn" id="envCopy">주소 복사</button></div>`;
+    box.hidden=false;
+    box.querySelector("#envCopy").onclick=()=>copyText(url);
+  }else if(local){
+    box.innerHTML=`<b>파일을 직접 연 상태입니다</b><span>자동 저장이 유지되지 않을 수 있습니다. 작업을 마치면 상단 '파일 저장'을 누르고, 다음에는 설정·백업 탭의 '파일 불러오기'로 이어서 쓰세요.</span>`;
+    box.hidden=false;
+  }
+})();
+let deferredInstall=null;
+const instBtn=document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt",ev=>{ev.preventDefault();deferredInstall=ev;instBtn.hidden=false;});
+instBtn.onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();try{await deferredInstall.userChoice;}catch(e){}deferredInstall=null;instBtn.hidden=true;};
+window.addEventListener("appinstalled",()=>{instBtn.hidden=true;toast("설치했습니다");});
 save();render();
 })();
 </script>
