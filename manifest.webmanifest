@@ -1,0 +1,17 @@
+{
+  "name": "견적 원장",
+  "short_name": "견적원장",
+  "description": "견적가와 실행가를 함께 관리하는 인테리어 견적 도구",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "ko",
+  "background_color": "#F4F6F8",
+  "theme_color": "#1D5A8C",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
